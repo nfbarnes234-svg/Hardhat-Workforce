@@ -1,0 +1,324 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  SUPERADMIN
+  ADMIN
+  CUSTOMER
+  WORKER
+  SUPPLIER
+}
+
+enum ProjectStatus {
+  REQUEST_SUBMITTED
+  UNDER_REVIEW
+  SURVEY_SCHEDULED
+  SURVEY_COMPLETED
+  MATERIALS_ORDERED
+  QUOTATION_SENT
+  QUOTATION_APPROVED
+  QUOTATION_REJECTED
+  OPEN_FOR_WORKERS
+  WORKERS_ASSIGNED
+  IN_PROGRESS
+  COMPLETED
+  ARCHIVED
+  CANCELLED
+}
+
+enum WorkerStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  SUSPENDED
+}
+
+enum AssignmentStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+  ASSIGNED
+  IN_PROGRESS
+  COMPLETED
+}
+
+enum QuotationStatus {
+  DRAFT
+  SENT
+  APPROVED
+  REJECTED
+  EXPIRED
+}
+
+enum PurchaseOrderStatus {
+  DRAFT
+  SENT
+  CONFIRMED
+  PARTIALLY_DELIVERED
+  DELIVERED
+  CANCELLED
+}
+
+enum NotificationType {
+  PROJECT_UPDATE
+  ASSIGNMENT
+  QUOTATION
+  MESSAGE
+  ORDER
+  SYSTEM
+}
+
+model User {
+  id               String    @id @default(cuid())
+  email            String    @unique
+  username         String    @unique
+  passwordHash     String
+  role             UserRole
+  firstName        String
+  lastName         String
+  phone            String?
+  avatar           String?
+  isActive         Boolean   @default(true)
+  resetCode        String?
+  resetCodeExpires DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  customerProfile Customer?
+  workerProfile   Worker?
+  supplierProfile Supplier?
+
+  sentMessages     Message[]      @relation("SentMessages")
+  receivedMessages Message[]      @relation("ReceivedMessages")
+  notifications    Notification[]
+  createdProjects  Project[]      @relation("CreatedBy")
+}
+
+model Customer {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  company   String?
+  address   String?
+  city      String?
+  postcode  String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  projects Project[]
+}
+
+model Worker {
+  id             String       @id @default(cuid())
+  userId         String       @unique
+  bio            String?
+  skills         String       @default("[]")
+  experience     Int          @default(0)
+  hourlyRate     Float?
+  availability   String       @default("available")
+  status         WorkerStatus @default(PENDING)
+  certifications String       @default("[]")
+  passportPhoto  String?
+  faceImage      String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  user        User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  assignments ProjectAssignment[]
+}
+
+model Supplier {
+  id           String   @id @default(cuid())
+  userId       String   @unique
+  companyName  String
+  address      String?
+  city         String?
+  postcode     String?
+  specialties  String   @default("[]")
+  rating       Float    @default(0)
+  category     String   @default("Other Categories")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user           User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  purchaseOrders PurchaseOrder[]
+  materials      Material[]
+  products       Product[]
+}
+
+model Product {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  price       Float
+  images      String   @default("[]")
+  supplierId  String
+  phone       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  supplier Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+}
+
+model Project {
+  id            String        @id @default(cuid())
+  title         String
+  description   String
+  location      String
+  serviceType   String
+  status        ProjectStatus @default(REQUEST_SUBMITTED)
+  contractPrice Float?
+  images        String        @default("[]")
+  customerId    String
+  createdById   String?
+  startDate     DateTime?
+  endDate       DateTime?
+  completedAt   DateTime?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  customer           Customer            @relation(fields: [customerId], references: [id])
+  createdBy          User?               @relation("CreatedBy", fields: [createdById], references: [id])
+  surveys            Survey[]
+  quotations         Quotation[]
+  assignments        ProjectAssignment[]
+  materials          Material[]
+  orders             PurchaseOrder[]
+  messages           Message[]
+  satisfactionSurvey SatisfactionSurvey?
+}
+
+model Survey {
+  id           String   @id @default(cuid())
+  projectId    String
+  surveyDate   DateTime
+  notes        String?
+  requirements String?
+  photos       String   @default("[]")
+  conductedBy  String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+}
+
+model SatisfactionSurvey {
+  id        String   @id @default(cuid())
+  projectId String   @unique
+  rating    Int
+  feedback  String
+  published Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+}
+
+model Quotation {
+  id           String          @id @default(cuid())
+  projectId    String
+  laborCost    Float           @default(0)
+  materialCost Float           @default(0)
+  otherCosts   Float           @default(0)
+  totalAmount  Float
+  validUntil   DateTime?
+  notes        String?
+  status       QuotationStatus @default(DRAFT)
+  sentAt       DateTime?
+  respondedAt  DateTime?
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+}
+
+model Material {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  unit        String
+  quantity    Float
+  unitPrice   Float
+  projectId   String?
+  supplierId  String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  project  Project?  @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  supplier Supplier? @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+}
+
+model PurchaseOrder {
+  id               String              @id @default(cuid())
+  orderNumber      String              @unique
+  projectId        String
+  supplierId       String
+  items            String              @default("[]")
+  totalAmount      Float
+  status           PurchaseOrderStatus @default(DRAFT)
+  notes            String?
+  deliveryDate     DateTime?
+  deliveredAt      DateTime?
+  receiptSubmitted Boolean             @default(false)
+  receiptVerified  Boolean             @default(false)
+  receiptItems     String?
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+
+  project  Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  supplier Supplier @relation(fields: [supplierId], references: [id])
+}
+
+model ProjectAssignment {
+  id          String           @id @default(cuid())
+  projectId   String
+  workerId    String
+  status      AssignmentStatus @default(PENDING)
+  progress    Int              @default(0)
+  notes       String?
+  assignedAt  DateTime         @default(now())
+  respondedAt DateTime?
+  completedAt DateTime?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  worker  Worker  @relation(fields: [workerId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, workerId])
+}
+
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String
+  type      NotificationType
+  title     String
+  message   String
+  link      String?
+  isRead    Boolean          @default(false)
+  createdAt DateTime         @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Message {
+  id             String   @id @default(cuid())
+  senderId       String
+  receiverId     String
+  projectId      String?
+  subject        String?
+  content        String
+  attachmentUrl  String?
+  attachmentName String?
+  isRead         Boolean  @default(false)
+  createdAt      DateTime @default(now())
+
+  sender   User     @relation("SentMessages", fields: [senderId], references: [id], onDelete: Cascade)
+  receiver User     @relation("ReceivedMessages", fields: [receiverId], references: [id], onDelete: Cascade)
+  project  Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+}
